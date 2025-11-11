@@ -15,3 +15,5 @@ Build the project and then
 ```shell
 Steve-Army --adress <adress|localhost> [-p <port>]
 ```
+
+This project is inspired by [Snowiiii](https://github.com/Snowiiii) (creator of pumpkin,BotMark)

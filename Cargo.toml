@@ -1,0 +1,10 @@
+[package]
+name = "Steve-Army"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+log = "0.4.28"
+simple_logger = "5.1.0"
+clap = { version = "4.5.51", features = ["derive"] }
