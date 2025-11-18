@@ -1,8 +1,12 @@
+mod utils;
+
 use std::net::TcpStream;
 use std::process::exit;
+use bytes::{Buf, BufMut, BytesMut};
 use clap::Parser;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpSocket;
+use crate::utils::types::Varint;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -53,14 +57,61 @@ async fn main() {
     }
 
     //Connect to the server
-    let tcp_stream = TcpStream::connect(&adrr_port)
-        .expect("Couldn't connect to the server");
+    let tcp_stream = tokio::net::TcpStream::connect(&adrr_port).await.unwrap();
+    let (mut reader, mut writer) = tokio::io::split(tcp_stream);
+
+    tokio::spawn(async move {
+        loop {
+            let mut buf = [0u8; 32];
+            reader.read(&mut buf).await.unwrap();
+            if buf != [0u8; 32] {
+                println!("{:?}", std::str::from_utf8(&buf));
+            }
+        }
+    });
+
 
     println!("{}", &adrr_port);
-    let stream = TcpStream::connect(adrr_port)
-        .expect("Can't connect to the server");
 
-    // TcpSocket::connect().await.expect("Can't connect to server").write().await;
+    tokio::spawn(async move {
+
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+        let mut data = & mut vec![];
+        //Protocol version
+        Varint::write(&mut data, 773).await;
+
+        //Server adress (size + adresse to u8)
+        let adress_clone = args.adress.clone();
+        data.push(adress_clone.len() as u8);
+        data.append(&mut adress_clone.into_bytes());
+
+        //Server Port
+        data.extend_from_slice(&mut &args.port.clone().to_be_bytes().to_vec());
+
+        //Intent
+        Varint::write(&mut data, 1).await;
+
+        //Packet id
+        let mut packet_id = &mut vec![];
+        Varint::write(&mut packet_id, 0).await;
+
+        //Lenght
+        let mut lenght = &mut vec![];
+        Varint::write(&mut lenght, (packet_id.len() + data.len()) as i32).await;
+
+        //Final
+        let final_packet = &mut vec![];
+        final_packet.append(&mut lenght);
+        final_packet.append(&mut packet_id);
+        final_packet.append(&mut data);
+
+        //send all
+        writer.write_all(&final_packet).await.unwrap();
+        writer.flush().await.unwrap();
+        println!("send");
+    });
+
 
     //For finish
     tokio::signal::ctrl_c().await.unwrap();
