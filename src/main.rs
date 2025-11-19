@@ -7,6 +7,7 @@ use crate::network::packets::handshake::intention::{Intent, Intention};
 use crate::network::packets::packet::Packet;
 use crate::network::packets::status::ping_request::PingRequest;
 use crate::network::packets::status::status_request::StatusRequest;
+use crate::utils::types::Varint;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -64,6 +65,9 @@ async fn main() {
             }
         }
     });
+
+    let jsp= &vec![0x80, 0x02];
+    println!("jsp yuivbsi {:?}", Varint::read(jsp));
 
 
     println!("{}", &adrr_port);

@@ -1,34 +1,28 @@
-use bytes::{Buf, BytesMut};
-
-const MAX_VARINT_SIZE: i32 = 5;
-const DATA_BITS_MASK: i32 = 127;
 pub struct Varint;
 
 impl Varint {
-    pub fn has_continuation_bit(value: i32) -> bool {
-        (value & 128) == 128
-    }
-
-    pub fn read(mut input: BytesMut) -> i32 {
+    pub fn read(buffer: &Vec<u8>) -> i32 {
         let mut out = 0;
         let mut bytes = 0;
+        let mut index = 0;
 
-        let mut byte_in: i32;
+        while index < buffer.len() {
+            let ins = buffer[index];
+            index += 1;
 
-        loop {
-            byte_in = input.get_i32();
+            out |= ((ins & 0x7F) as i32) << (bytes * 7);
             bytes += 1;
-            out |= (byte_in & DATA_BITS_MASK) << bytes * 7;
 
-            if bytes > MAX_VARINT_SIZE {
+            if bytes > 5 {
                 panic!("Varint too big");
             }
 
-            if Self::has_continuation_bit(byte_in){
-                break;
+            if (ins & 0x80) == 0 {
+                return out
             }
         }
-        out
+
+        return out;
     }
 
 
