@@ -1,17 +1,17 @@
 mod utils;
+mod network;
 
-use std::net::TcpStream;
-use std::process::exit;
-use bytes::{Buf, BufMut, BytesMut};
 use clap::Parser;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpSocket;
-use crate::utils::types::Varint;
+use crate::network::packets::handshake::intention::{Intent, Intention};
+use crate::network::packets::packet::Packet;
+use crate::network::packets::status::ping_request::PingRequest;
+use crate::network::packets::status::status_request::StatusRequest;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 pub struct Args{
-    /// Adress of the server
+    /// Address of the server
     #[arg(long)]
     adress: String,
 
@@ -22,11 +22,6 @@ pub struct Args{
 
 impl Args {
     pub fn adress_and_port_valid(&self) ->bool{
-        //Localhost is localhost lol
-        if self.adress.eq("localhost") {
-            return true;
-        }
-        
         let split_addr = self.adress.split(".").collect::<Vec<&str>>();
         if split_addr.len() != 4 {
             return false;
@@ -51,10 +46,10 @@ async fn main() {
     let adrr_port = &format!("{}:{}", args.adress.parse::<String>().unwrap(), args.port);
 
 
-    if !args.adress_and_port_valid() {
+    /*if !args.adress_and_port_valid() {
         log::error!("Invalid adress format");
         exit(1);
-    }
+    }*/
 
     //Connect to the server
     let tcp_stream = tokio::net::TcpStream::connect(&adrr_port).await.unwrap();
@@ -62,10 +57,10 @@ async fn main() {
 
     tokio::spawn(async move {
         loop {
-            let mut buf = [0u8; 32];
+            let mut buf = [0u8; 100];
             reader.read(&mut buf).await.unwrap();
-            if buf != [0u8; 32] {
-                println!("{:?}", std::str::from_utf8(&buf));
+            if buf != [0u8; 100] {
+                println!("Reader response: {:?}", &buf);
             }
         }
     });
@@ -77,39 +72,30 @@ async fn main() {
 
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-        let mut data = & mut vec![];
-        //Protocol version
-        Varint::write(&mut data, 773).await;
+        for i in 0..1 {
+            //Send intention
+            Intention::new(
+                773,
+                args.adress.clone(),
+                args.port,
+                Intent::Status
+            ).send(&mut writer)
+                .await
+                .expect("Intention send");
 
-        //Server adress (size + adresse to u8)
-        let adress_clone = args.adress.clone();
-        data.push(adress_clone.len() as u8);
-        data.append(&mut adress_clone.into_bytes());
+            println!("Intention n°{} sent", i);
 
-        //Server Port
-        data.extend_from_slice(&mut &args.port.clone().to_be_bytes().to_vec());
+            //Then send status request
+            StatusRequest.send(&mut writer).await.expect("StatusRequest send");
+            println!("StatusRequest n°{} sent", i);
 
-        //Intent
-        Varint::write(&mut data, 1).await;
+            //Finally send ping request
+            PingRequest::default().send(&mut writer).await.expect("PingRequest send");
+            println!("PingRequest n°{} sent", i);
 
-        //Packet id
-        let mut packet_id = &mut vec![];
-        Varint::write(&mut packet_id, 0).await;
+        }
 
-        //Lenght
-        let mut lenght = &mut vec![];
-        Varint::write(&mut lenght, (packet_id.len() + data.len()) as i32).await;
-
-        //Final
-        let final_packet = &mut vec![];
-        final_packet.append(&mut lenght);
-        final_packet.append(&mut packet_id);
-        final_packet.append(&mut data);
-
-        //send all
-        writer.write_all(&final_packet).await.unwrap();
-        writer.flush().await.unwrap();
-        println!("send");
+        writer.shutdown().await.unwrap();
     });
 
 
