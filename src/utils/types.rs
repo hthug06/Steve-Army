@@ -26,11 +26,12 @@ impl Varint {
     }
 
 
-    pub async fn write(buffer: &mut Vec<u8>, mut value: i32) {
+    pub async fn write(buffer: &mut Vec<u8>, value: i32) {
+        let mut uvalue = value as u32;
         loop {
-            let b: u8 = value as u8 & 0x7F;
-            value >>= 7;
-            if value == 0 {
+            let b: u8 = uvalue as u8 & 0x7F;
+            uvalue >>= 7;
+            if uvalue == 0 {
                 buffer.push(b);
                 break;
             }

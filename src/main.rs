@@ -66,10 +66,6 @@ async fn main() {
         }
     });
 
-    let jsp= &vec![0x80, 0x02];
-    println!("jsp yuivbsi {:?}", Varint::read(jsp));
-
-
     println!("{}", &adrr_port);
 
     tokio::spawn(async move {
