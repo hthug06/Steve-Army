@@ -13,7 +13,7 @@ If You want to help / give me some advice, you can make an issue!
 ## How to use it? (updated when new feature are implemented)
 Build the project and then
 ```shell
-Steve-Army --adress <adress|localhost> [-p <port>]
+Steve-Army --adress <adress|localhost> [-p <port> | -i]
 ```
 
 This project is inspired by [Snowiiii](https://github.com/Snowiiii) (creator of pumpkin,BotMark)

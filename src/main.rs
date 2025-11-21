@@ -1,13 +1,12 @@
 mod utils;
 mod network;
+mod client;
+mod send_steve;
+mod server_info;
 
 use clap::Parser;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use crate::network::packets::handshake::intention::{Intent, Intention};
-use crate::network::packets::packet::Packet;
-use crate::network::packets::status::ping_request::PingRequest;
-use crate::network::packets::status::status_request::StatusRequest;
-use crate::utils::types::Varint;
+use crate::send_steve::SendSteve;
+use crate::server_info::ServerInfo;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -17,8 +16,12 @@ pub struct Args{
     adress: String,
 
     /// Port of the server
-    #[arg(short, long, default_value_t = 25565)]
+    #[arg(short, default_value_t = 25565)]
     port: u16,
+
+    /// Show info of the server (imitate the server list)
+    #[arg(short, default_value_t = false)]
+    info: bool
 }
 
 impl Args {
@@ -46,60 +49,20 @@ async fn main() {
     let args = Args::parse();
     let adrr_port = &format!("{}:{}", args.adress.parse::<String>().unwrap(), args.port);
 
-
-    /*if !args.adress_and_port_valid() {
-        log::error!("Invalid adress format");
-        exit(1);
-    }*/
-
     //Connect to the server
     let tcp_stream = tokio::net::TcpStream::connect(&adrr_port).await.unwrap();
-    let (mut reader, mut writer) = tokio::io::split(tcp_stream);
+    let (reader, writer) = tokio::io::split(tcp_stream);
 
-    tokio::spawn(async move {
-        loop {
-            let mut buf = [0u8; 100];
-            reader.read(&mut buf).await.unwrap();
-            if buf != [0u8; 100] {
-                println!("Reader response: {:?}", &buf);
-            }
-        }
-    });
+    if args.info {
+        ServerInfo::info(reader, writer, &args).await;
+    }
 
-    println!("{}", &adrr_port);
-
-    tokio::spawn(async move {
-
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
-        for i in 0..1 {
-            //Send intention
-            Intention::new(
-                773,
-                args.adress.clone(),
-                args.port,
-                Intent::Status
-            ).send(&mut writer)
-                .await
-                .expect("Intention send");
-
-            println!("Intention n°{} sent", i);
-
-            //Then send status request
-            StatusRequest.send(&mut writer).await.expect("StatusRequest send");
-            println!("StatusRequest n°{} sent", i);
-
-            //Finally send ping request
-            PingRequest::default().send(&mut writer).await.expect("PingRequest send");
-            println!("PingRequest n°{} sent", i);
-
-        }
-
-        writer.shutdown().await.unwrap();
-    });
-
+    else{
+        SendSteve::new(10);
+    }
 
     //For finish
     tokio::signal::ctrl_c().await.unwrap();
     log::info!("Shutting down...");
+
 }
