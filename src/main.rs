@@ -1,22 +1,21 @@
-mod utils;
-mod network;
 mod client;
-mod send_steve;
+mod network;
 mod server_info;
+mod utils;
 
-use clap::{arg, Parser};
-use tokio::task;
 use crate::client::Client;
-use crate::network::packets::handshake::intention::{Intent, Intention};
 use crate::network::packets::ServerPacket;
-use crate::network::packets::status::ping_request::PingRequest;
+use crate::network::packets::handshake::{Intent, Intention};
 use crate::network::packets::status::status_request::StatusRequest;
-use crate::send_steve::SendSteve;
 use crate::server_info::ServerInfo;
+use clap::{Parser, arg};
+use log::LevelFilter;
+use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
+use tokio::task;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
-pub struct Args{
+pub struct Args {
     /// Address of the server
     #[arg(long)]
     adress: String,
@@ -27,67 +26,54 @@ pub struct Args{
 
     /// Show info of the server (imitate the server list)
     #[arg(short, default_value_t = false)]
-    info: bool
-}
-
-impl Args {
-    pub fn adress_and_port_valid(&self) ->bool{
-        let split_addr = self.adress.split(".").collect::<Vec<&str>>();
-        if split_addr.len() != 4 {
-            return false;
-        }
-
-        //Check if address is in a valid format
-        for addr in split_addr{
-            if let Err(_) = addr.parse::<u8>(){
-                return false;
-            }
-        }
-
-        //No need to check for the port, it's already checked by the parser
-        true
-    }
+    info: bool,
 }
 
 #[tokio::main]
 async fn main() {
-    simple_logger::init_with_level(log::Level::Info).unwrap(); //Start log
+    TermLogger::init(
+        LevelFilter::Info,
+        Config::default(),
+        TerminalMode::Mixed,
+        ColorChoice::Auto,
+    )
+    .unwrap(); //Start log
     let args = Args::parse();
     let mut join_handles = Vec::new();
 
     if args.info {
         ServerInfo::info(args.adress.clone(), args.port);
-    }
-    else{
-
-        for _ in 0..1 {
+    } else {
+        for num in 0..1 {
             let mut address_for_task = args.adress.clone();
             address_for_task.push_str(":");
             address_for_task.push_str(args.port.to_string().as_str());
             let addr = args.adress.clone();
-            println!("Connecting to {}", address_for_task);
             let handle = task::spawn(async move {
-                println!("Connexion à {}", address_for_task);
+                log::info!("Connecting to {} for client #{}", address_for_task, num);
                 match Client::connect(&address_for_task).await {
                     Ok(mut client) => {
-                        println!("Connecté !");
+                        log::info!("Client #{} is connected!", num);
                         // Send the first packet (handshake) + another one
-                        client.send_packet(Intention::new(
-                            773,
-                            &addr,
-                            args.port,
-                            Intent::Login,
-                        ).as_raw_packet().await)
+                        client
+                            .send_packet(
+                                Intention::new(773, &addr, args.port, Intent::Login)
+                                    .as_raw_packet()
+                                    .await,
+                            )
                             .await
-                            .expect("idk");
+                            .expect("failed to send Handshake packet");
 
-                        client.send_packet(StatusRequest.as_raw_packet().await).await.unwrap();
+                        client
+                            .send_packet(StatusRequest.as_raw_packet().await)
+                            .await
+                            .unwrap();
 
                         // read loop for this client
                         loop {
                             match client.read_packet().await {
                                 Ok(packet) => {
-                                    println!("[{}] Reçu paquet: ID=0x{:X}", address_for_task, packet.id);
+                                    //This is for debugging
                                     println!("{:?}", packet);
 
                                     match packet.id {
@@ -96,14 +82,14 @@ async fn main() {
                                     }
                                 }
                                 Err(e) => {
-                                    println!("[{}] Erreur: {}", address_for_task, e);
+                                    log::error!("[Client {}] Erreur: {}", num, e);
                                     break;
                                 }
                             }
                         }
                     }
                     Err(e) => {
-                        eprintln!("[{}] Connexion échouée: {}", address_for_task, e);
+                        log::error!("Connexion failed for client #{} : {}", num, e);
                     }
                 }
             });
@@ -115,11 +101,7 @@ async fn main() {
         }
     }
 
-
-
-
     //For finish
     tokio::signal::ctrl_c().await.unwrap();
     log::info!("Shutting down...");
-
 }

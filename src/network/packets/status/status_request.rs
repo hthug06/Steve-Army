@@ -1,4 +1,4 @@
-use crate::network::packets::{Packet, ServerPacket};
+use crate::network::packets::ServerPacket;
 
 pub struct StatusRequest;
 
@@ -8,6 +8,6 @@ impl ServerPacket for StatusRequest {
     }
 
     async fn data(&self) -> Vec<u8> {
-        Vec::new()
+        vec![]
     }
 }

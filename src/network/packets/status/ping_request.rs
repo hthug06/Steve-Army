@@ -1,19 +1,22 @@
+use crate::network::packets::ServerPacket;
 use std::time::{SystemTime, UNIX_EPOCH};
-use crate::network::packets::{Packet, ServerPacket};
 
-pub struct PingRequest{
-    pub timestamp: i64
+pub struct PingRequest {
+    pub timestamp: u128,
 }
 
 impl Default for PingRequest {
     fn default() -> Self {
-        Self{
-            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64,
+        Self {
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis(),
         }
     }
 }
 
-impl ServerPacket for PingRequest{
+impl ServerPacket for PingRequest {
     fn id(&self) -> i32 {
         1
     }
