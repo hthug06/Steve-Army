@@ -1,69 +1,62 @@
-use serde_json::{from_str, Value};
-use tokio::io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
-use tokio::net::TcpStream;
-use crate::Args;
+use std::io;
+use serde_json::{from_str, json, Value};
+use tokio::task;
+use crate::client::Client;
 use crate::network::packets::handshake::intention::{Intent, Intention};
-use crate::network::packets::packet::Packet;
+use crate::network::packets::{RawPacket, ServerPacket};
 use crate::network::packets::status::ping_request::PingRequest;
 use crate::network::packets::status::status_request::StatusRequest;
-use crate::utils::types::Varint;
+
 pub struct ServerInfo;
 
 impl ServerInfo {
-    pub async fn info(reader: ReadHalf<TcpStream>, mut writer: WriteHalf<TcpStream>, args: &Args) {
+    pub fn info(address: String, port: u16) {
+        let mut address_for_task = address.clone();
+        address_for_task.push_str(":");
+        address_for_task.push_str(port.to_string().as_str());
+        task::spawn(async move {
+            match Client::connect(&address_for_task).await {
+                Ok(mut client) => {
+                    // Send the first packet (handshake) + the status request
+                    client.send_packet(Intention::new(
+                        773,
+                        &address,
+                        port,
+                        Intent::Status,
+                    ).as_raw_packet().await)
+                        .await
+                        .expect("Failed to send intention packet");
 
-        Self::read(reader).await;
+                    client.send_packet(StatusRequest.as_raw_packet().await).await.unwrap();
 
-        //Send intention
-        Intention::new(
-            773,
-            args.adress.clone(),
-            args.port,
-            Intent::Status
-        ).send(&mut writer)
-            .await
-            .expect("Intention not send");
-
-        //Then send status request
-        StatusRequest.send(&mut writer).await.expect("StatusRequest not send");
-
-        //Finally send ping request (useless)
-        PingRequest::default().send(&mut writer).await.expect("PingRequest not send");
-
-
-    writer.shutdown().await.unwrap();
-    }
-
-
-    async fn read(mut reader: ReadHalf<TcpStream>) {
-        tokio::spawn(async move {
-            loop {
-                //Create a buffer for the packet lenght only
-                let mut buffer = vec![0; 2];
-                reader.read(&mut buffer).await.unwrap();
-                if buffer != [0; 2] {
-                    let packet_size = Varint::read(&mut buffer);
-
-                    //get the packet id after
-                    buffer = vec![0; 1];
-                    reader.read(&mut buffer).await.unwrap();
-                    let packet_id = Varint::read(&mut buffer);
-
-                    //Get the rest of the packet if this is the server info packet
-                    if packet_id == 0x00{
-                        buffer = vec![0; (packet_size-1) as usize];
-                        reader.read(&mut buffer).await.unwrap();
-                        ServerInfo::read_server_info(buffer).await;
-                        break
+                    // read loop for this client
+                    loop {
+                        match client.read_packet().await {
+                            Ok(packet) => {
+                                match packet.id {
+                                    0x0 => {
+                                        Self::handle_status_request(packet);
+                                        client.send_packet(PingRequest::default().as_raw_packet().await).await.expect("Failed to send ping Request packet")
+                                    },
+                                    _ => break,
+                                }
+                            }
+                            Err(e) => {
+                                println!("[{}] Erreur: {}", address_for_task, e);
+                                break;
+                            }
+                        }
                     }
+                }
+                Err(e) => {
+                    eprintln!("[{}] Connexion échouée: {}", address_for_task, e);
                 }
             }
         });
     }
 
-    async fn read_server_info(buffer: Vec<u8>) {
-        //Delete str len + something?
-        let json = buffer[2..].to_vec();
+    fn handle_status_request(raw_packet: RawPacket) {
+        let json = raw_packet.data[2..].to_vec();
 
         match String::from_utf8(json) {
             Ok(json_str) => {

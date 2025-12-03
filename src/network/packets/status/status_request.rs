@@ -1,9 +1,9 @@
-use crate::network::packets::packet::Packet;
+use crate::network::packets::{Packet, ServerPacket};
 
 pub struct StatusRequest;
 
-impl Packet for StatusRequest {
-    fn id(&self) -> u8 {
+impl ServerPacket for StatusRequest {
+    fn id(&self) -> i32 {
         0
     }
 

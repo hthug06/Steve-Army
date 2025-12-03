@@ -1,4 +1,4 @@
-use crate::network::packets::packet::Packet;
+use crate::network::packets::{Packet, RawPacket, ServerPacket};
 use crate::utils::types::Varint;
 
 #[derive(Clone)]
@@ -16,19 +16,19 @@ pub struct Intention {
 }
 
 impl Intention {
-    pub fn new(protocol_version: u16, server_adress: String, server_port: u16, intent: Intent) -> Self {
+    pub fn new(protocol_version: u16, server_adress: &String, server_port: u16, intent: Intent) -> Self {
         Self{
             protocol_version,
-            server_adress,
+            server_adress: server_adress.clone(),
             server_port,
             intent,
         }
     }
 }
 
-impl Packet for Intention {
+impl ServerPacket for Intention {
 
-    fn id(&self) -> u8 {
+    fn id(&self) -> i32 {
         0
     }
 
